@@ -1,5 +1,51 @@
 <template>
   <div class="w-full space-y-6">
+    <!-- History Controls -->
+    <div v-if="gameStarted" class="flex items-center gap-2">
+      <button
+        @click="handleUndo"
+        :disabled="!canUndo"
+        :class="[
+          'flex-1 py-2 px-4 rounded-lg font-medium transition-colors touch-target flex items-center justify-center gap-2',
+          canUndo
+            ? 'bg-gray-700 text-white hover:bg-gray-600'
+            : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+        ]"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+        </svg>
+        Undo
+      </button>
+      <button
+        @click="handleRedo"
+        :disabled="!canRedo"
+        :class="[
+          'flex-1 py-2 px-4 rounded-lg font-medium transition-colors touch-target flex items-center justify-center gap-2',
+          canRedo
+            ? 'bg-gray-700 text-white hover:bg-gray-600'
+            : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+        ]"
+      >
+        Redo
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+        </svg>
+      </button>
+      <button
+        @click="showHistory = !showHistory"
+        class="py-2 px-4 rounded-lg font-medium bg-gray-700 text-white hover:bg-gray-600 transition-colors touch-target"
+      >
+        History
+      </button>
+    </div>
+    
+    <!-- History Panel -->
+    <HistoryPanel
+      v-if="showHistory && gameStarted"
+      :history-entries="historyEntries"
+    />
+    
     <!-- Round Indicator -->
     <RoundIndicator
       :current-round="currentRound"
@@ -76,23 +122,44 @@
       <div class="text-3xl font-bold text-green-400">Game Over!</div>
       <div class="text-2xl font-bold">{{ winner.name }} Wins!</div>
       <div class="text-lg text-gray-300">Final Score: {{ winner.score.toLocaleString() }}</div>
-      <button
-        @click="handleNewGame"
-        class="w-full py-4 px-6 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors touch-target"
-      >
-        New Game
-      </button>
+      <div class="flex gap-3">
+        <button
+          @click="showLeaderboard = !showLeaderboard"
+          class="flex-1 py-3 px-4 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors touch-target"
+        >
+          Leaderboard
+        </button>
+        <button
+          @click="handleNewGame"
+          class="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors touch-target"
+        >
+          New Game
+        </button>
+      </div>
     </div>
+    
+    <!-- Leaderboard -->
+    <Leaderboard
+      v-if="showLeaderboard"
+      ref="leaderboardRef"
+    />
   </div>
 </template>
 
 <script setup>
+import { ref, computed, watch, nextTick } from 'vue'
 import { useGameState } from '../composables/useGameState'
 import RoundIndicator from './RoundIndicator.vue'
 import PlayerList from './PlayerList.vue'
 import DiceRoller from './DiceRoller.vue'
 import BlackDie from './BlackDie.vue'
 import ScoreInput from './ScoreInput.vue'
+import HistoryPanel from './HistoryPanel.vue'
+import Leaderboard from './Leaderboard.vue'
+
+const showHistory = ref(false)
+const showLeaderboard = ref(false)
+const leaderboardRef = ref(null)
 
 const {
   gameMode,
@@ -115,6 +182,7 @@ const {
   blackDieScore,
   currentPlayer,
   initializeGame,
+  loadGameState,
   rollWhiteDice,
   setWhiteDice,
   rerollWhiteDice,
@@ -130,8 +198,15 @@ const {
   confirmBlackDieManual,
   getBankedCount,
   hasBankedBlackDie,
-  resetGame
+  resetGame,
+  canUndo,
+  canRedo,
+  undo,
+  redo,
+  getHistoryEntries
 } = useGameState()
+
+const historyEntries = computed(() => getHistoryEntries())
 
 // Reset game and notify parent
 function handleReset() {
@@ -142,6 +217,7 @@ function handleReset() {
 // Expose for parent
 defineExpose({
   initializeGame,
+  loadGameState,
   resetGame: handleReset,
   get gameStarted() {
     return gameStarted.value
@@ -208,12 +284,36 @@ function handleBlackDieRerollManual(value) {
   rerollBlackDieManual(value)
 }
 
+// History handlers
+function handleUndo() {
+  if (confirm('Are you sure you want to undo? This will revert to the previous game state.')) {
+    undo()
+  }
+}
+
+function handleRedo() {
+  redo()
+}
+
 // New game
 function handleNewGame() {
   resetGame()
+  showHistory.value = false
+  showLeaderboard.value = false
   // Force parent to show settings by explicitly setting gameStarted to false
   // The watcher should catch this, but we'll ensure it happens
 }
+
+// Watch for game end to reload leaderboard
+watch(() => gameEnded.value, (ended) => {
+  if (ended && leaderboardRef.value) {
+    nextTick(() => {
+      if (leaderboardRef.value) {
+        leaderboardRef.value.reload()
+      }
+    })
+  }
+})
 </script>
 
 <style scoped>

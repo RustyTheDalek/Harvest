@@ -1,7 +1,23 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { calculateWhiteDiceScore, calculateBlackDieScore, isBlackDiePhase } from '../utils/scoring'
+import { sessionStorage, localStorage } from '../utils/storage'
+import { useGameHistory } from './useGameHistory'
 
 export function useGameState() {
+  // History tracking
+  const {
+    canUndo,
+    canRedo,
+    createSnapshot,
+    addToHistory,
+    undo: historyUndo,
+    redo: historyRedo,
+    jumpToIndex,
+    clearHistory,
+    getHistoryEntries,
+    currentIndex,
+    history
+  } = useGameHistory()
   // Game configuration
   const gameMode = ref('dice') // 'dice' or 'tracker'
   const endgameTarget = ref(10000)
@@ -40,6 +56,7 @@ export function useGameState() {
   
   // Initialize game
   function initializeGame(mode, target, playerNames) {
+    clearHistory()
     gameMode.value = mode
     endgameTarget.value = target
     players.value = playerNames.map(name => ({
@@ -53,6 +70,8 @@ export function useGameState() {
     gameEnded.value = false
     winner.value = null
     resetTurnState()
+    trackHistory('Game started')
+    saveGameState()
   }
   
   // Reset turn state
@@ -129,7 +148,28 @@ export function useGameState() {
   
   // Complete white dice turn
   function completeWhiteDiceTurn() {
-    if (!whiteDiceRolled.value) return
+    if (!whiteDiceRolled.value) {
+      console.log('[GAME STATE] completeWhiteDiceTurn: whiteDiceRolled is false, returning')
+      return
+    }
+    
+    const playerName = currentPlayer.value.name
+    const scoreAdded = whiteDiceScore.value
+    const oldScore = currentPlayer.value.score
+    const newScore = oldScore + scoreAdded
+    
+    console.log('[GAME STATE] completeWhiteDiceTurn:', {
+      player: playerName,
+      round: currentRound.value,
+      playerIndex: currentPlayerIndex.value,
+      scoreAdded,
+      oldScore,
+      newScore
+    })
+    
+    // Track history BEFORE making any changes - snapshot has state before action
+    // This ensures undo restores to the exact state before the score was added
+    trackHistory(`${playerName} scored ${scoreAdded} (Total: ${newScore})`)
     
     // Add score to current player
     currentPlayer.value.score += whiteDiceScore.value
@@ -138,34 +178,71 @@ export function useGameState() {
     if (currentPlayer.value.score >= endgameTarget.value) {
       gameEnded.value = true
       winner.value = currentPlayer.value
+      saveGameState()
+      saveToLeaderboard()
       return
     }
     
     // Move to next player or next round
     moveToNextPlayer()
+    
+    saveGameState()
   }
   
   // Move to next player
   function moveToNextPlayer() {
+    const oldRound = currentRound.value
+    const oldPlayerIndex = currentPlayerIndex.value
+    
+    console.log('[GAME STATE] moveToNextPlayer called:', {
+      oldRound,
+      oldPlayerIndex,
+      totalPlayers: players.value.length
+    })
+    
     currentPlayerIndex.value++
     
     // If all players have gone, start new round
     if (currentPlayerIndex.value >= players.value.length) {
       // Check if black die phase BEFORE incrementing (check if we just completed round 3, 6, 9, etc.)
       const justCompletedRound = currentRound.value
-      if (justCompletedRound > 0 && justCompletedRound % 3 === 0) {
+      const willBeBlackDiePhase = justCompletedRound > 0 && justCompletedRound % 3 === 0
+      
+      console.log('[GAME STATE] Round complete, moving to next round:', {
+        completedRound: justCompletedRound,
+        willBeBlackDiePhase,
+        newRound: currentRound.value + 1
+      })
+      
+      // Update round and player index FIRST to get to a valid state
+      currentRound.value++
+      currentPlayerIndex.value = 0
+      
+      // Initialize black die state if needed
+      if (willBeBlackDiePhase) {
         blackDiePhaseActive.value = true
-        // Initialize black die state for all players (if not already set)
         players.value.forEach((_, index) => {
           if (blackDieBanked.value[index] === undefined) {
             blackDieBanked.value[index] = 0
           }
         })
+        // Track history AFTER state is updated to valid values
+        trackHistory(`Round ${justCompletedRound} complete - Black Die Phase started - ${currentPlayer.value.name}'s turn`)
+      } else {
+        // Track history AFTER state is updated to valid values
+        // Only track if round actually changed
+        if (currentRound.value !== oldRound) {
+          trackHistory(`Round ${currentRound.value} started - ${currentPlayer.value.name}'s turn`)
+        }
       }
-      
-      currentRound.value++
-      currentPlayerIndex.value = 0
+    } else {
+      console.log('[GAME STATE] Moving to next player in same round:', {
+        newPlayerIndex: currentPlayerIndex.value,
+        player: currentPlayer.value?.name
+      })
     }
+    // Don't track turn changes for simple player advances - only track when round changes
+    // This prevents duplicate history entries when undoing/redoing
     
     resetTurnState()
   }
@@ -177,7 +254,9 @@ export function useGameState() {
     blackDieBanked.value[currentPlayerIndex.value] = currentBanked + 1
     blackDieRolled.value = true
     blackDieScore.value = 0
+    trackHistory(`${currentPlayer.value.name} banked black die (${currentBanked + 1} reroll${currentBanked + 1 > 1 ? 's' : ''})`)
     moveToNextBlackDiePlayer()
+    saveGameState()
   }
   
   // Roll black die (initial roll)
@@ -186,6 +265,8 @@ export function useGameState() {
     blackDieValue.value = Math.floor(Math.random() * 6) + 1
     blackDieScore.value = calculateBlackDieScore(blackDieValue.value)
     blackDieRolled.value = true
+    trackHistory(`${currentPlayer.value.name} rolled black die: ${blackDieValue.value} (${blackDieScore.value} points)`)
+    saveGameState()
     // Don't move to next player yet - wait for confirmation or reroll
   }
   
@@ -198,22 +279,34 @@ export function useGameState() {
       // Roll again and take the better result
       const newRoll = Math.floor(Math.random() * 6) + 1
       const newScore = calculateBlackDieScore(newRoll)
+      const oldScore = blackDieScore.value
       
       // Take the better score
       if (newScore > blackDieScore.value) {
         blackDieValue.value = newRoll
         blackDieScore.value = newScore
+        trackHistory(`${currentPlayer.value.name} rerolled black die: ${newRoll} (${newScore} points, was ${oldScore})`)
+      } else {
+        trackHistory(`${currentPlayer.value.name} rerolled black die: ${newRoll} (kept ${oldScore} points)`)
       }
-      // If new score is worse or equal, keep the current one
       
       // Subtract 1 from banked rerolls
       blackDieBanked.value[currentPlayerIndex.value] = rerollCount - 1
+      saveGameState()
     }
   }
   
   // Confirm black die roll and add score (keep current result)
   function confirmBlackDieRoll() {
     if (!blackDieRolled.value) return
+    
+    const playerName = currentPlayer.value.name
+    const scoreAdded = blackDieScore.value
+    const newScore = currentPlayer.value.score + scoreAdded
+    
+    // Track history BEFORE making any changes - snapshot has state before action
+    // This ensures undo restores to the exact state before the score was added
+    trackHistory(`${playerName} scored ${scoreAdded} from black die (Total: ${newScore})`)
     
     // Add score to current player
     currentPlayer.value.score += blackDieScore.value
@@ -222,13 +315,15 @@ export function useGameState() {
     if (currentPlayer.value.score >= endgameTarget.value) {
       gameEnded.value = true
       winner.value = currentPlayer.value
+      saveGameState()
+      saveToLeaderboard()
       return
     }
     
-    // Don't clear banked rerolls - they persist until used
-    // (They're only subtracted when you actually reroll)
-    
+    // Move to next player
     moveToNextBlackDiePlayer()
+    
+    saveGameState()
   }
   
   
@@ -237,6 +332,8 @@ export function useGameState() {
     blackDieValue.value = value
     blackDieScore.value = calculateBlackDieScore(value)
     blackDieRolled.value = true
+    trackHistory(`${currentPlayer.value.name} rolled black die: ${value} (${blackDieScore.value} points)`)
+    saveGameState()
     // Don't move to next player yet - wait for confirmation or reroll
   }
   
@@ -247,16 +344,20 @@ export function useGameState() {
     
     if (rerollCount > 0) {
       const newScore = calculateBlackDieScore(newRoll)
+      const oldScore = blackDieScore.value
       
       // Take the better score
       if (newScore > blackDieScore.value) {
         blackDieValue.value = newRoll
         blackDieScore.value = newScore
+        trackHistory(`${currentPlayer.value.name} rerolled black die: ${newRoll} (${newScore} points, was ${oldScore})`)
+      } else {
+        trackHistory(`${currentPlayer.value.name} rerolled black die: ${newRoll} (kept ${oldScore} points)`)
       }
-      // If new score is worse or equal, keep the current one
       
       // Subtract 1 from banked rerolls
       blackDieBanked.value[currentPlayerIndex.value] = rerollCount - 1
+      saveGameState()
     }
   }
   
@@ -291,8 +392,222 @@ export function useGameState() {
     return getBankedCount() > 0
   }
   
+  // Helper function to get current game state for snapshot
+  function getGameState() {
+    return {
+      gameMode: gameMode.value,
+      endgameTarget: endgameTarget.value,
+      players: players.value.map(p => ({ name: p.name, score: p.score, id: p.id })),
+      currentRound: currentRound.value,
+      currentPlayerIndex: currentPlayerIndex.value,
+      gameEnded: gameEnded.value,
+      winner: winner.value ? { name: winner.value.name, score: winner.value.score, id: winner.value.id } : null,
+      whiteDice: [...whiteDice.value],
+      whiteDiceRolled: whiteDiceRolled.value,
+      rerollUsed: rerollUsed.value,
+      whiteDiceScore: whiteDiceScore.value,
+      autoRerolled: autoRerolled.value,
+      blackDieBanked: { ...blackDieBanked.value },
+      blackDiePhaseActive: blackDiePhaseActive.value,
+      blackDieRolled: blackDieRolled.value,
+      blackDieValue: blackDieValue.value,
+      blackDieScore: blackDieScore.value
+    }
+  }
+  
+  // Track history for an action
+  function trackHistory(actionDescription) {
+    if (!gameStarted.value) {
+      console.log('[GAME STATE] trackHistory: Game not started, skipping')
+      return
+    }
+    // Create snapshot AFTER state is fully updated
+    const state = getGameState()
+    console.log('[GAME STATE] trackHistory called:', {
+      action: actionDescription,
+      currentRound: state.currentRound,
+      currentPlayerIndex: state.currentPlayerIndex,
+      currentPlayer: state.players[state.currentPlayerIndex]?.name,
+      playerScores: state.players.map(p => ({ name: p.name, score: p.score })),
+      whiteDiceRolled: state.whiteDiceRolled,
+      rerollUsed: state.rerollUsed
+    })
+    const snapshot = createSnapshot(state, actionDescription)
+    console.log('[GAME STATE] Snapshot created with scores:', {
+      players: snapshot.state.players.map(p => ({ name: p.name, score: p.score }))
+    })
+    // addToHistory will truncate future history if we're in the middle of history
+    // (e.g., after undo or jump to history point)
+    addToHistory(snapshot)
+  }
+  
+  // Undo to previous state
+  function undo() {
+    const state = historyUndo()
+    if (state) {
+      console.log('[GAME STATE] Undo: Restoring state:', {
+        players: state.players.map(p => ({ name: p.name, score: p.score })),
+        currentRound: state.currentRound,
+        currentPlayerIndex: state.currentPlayerIndex
+      })
+      // CRITICAL: Restore state first, then reset turn state
+      restoreState(state)
+      // Reset turn state after undo to prevent taking another turn immediately
+      // The restored state might have whiteDiceRolled: true from a completed turn
+      resetTurnState()
+      // Force Vue to update by triggering a reactive update
+      // Create a new array reference to ensure reactivity
+      const currentPlayers = [...players.value]
+      players.value = []
+      players.value = currentPlayers
+      console.log('[GAME STATE] Undo: State restored and turn state reset, current players:', {
+        players: players.value.map(p => ({ name: p.name, score: p.score }))
+      })
+      saveGameState()
+      return true
+    }
+    return false
+  }
+  
+  // Redo to next state
+  function redo() {
+    const state = historyRedo()
+    if (state) {
+      console.log('[GAME STATE] Redo: Restoring state:', {
+        players: state.players.map(p => ({ name: p.name, score: p.score })),
+        currentRound: state.currentRound,
+        currentPlayerIndex: state.currentPlayerIndex
+      })
+      // CRITICAL: Restore state first, then reset turn state
+      restoreState(state)
+      // Reset turn state after redo to ensure clean state
+      resetTurnState()
+      // Force Vue to update by triggering a reactive update
+      // Create a new array reference to ensure reactivity
+      const currentPlayers = [...players.value]
+      players.value = []
+      players.value = currentPlayers
+      console.log('[GAME STATE] Redo: State restored and turn state reset, current players:', {
+        players: players.value.map(p => ({ name: p.name, score: p.score }))
+      })
+      saveGameState()
+      return true
+    }
+    return false
+  }
+  
+  // Save game state to session storage
+  function saveGameState() {
+    if (!gameStarted.value) return
+    
+    const state = {
+      gameMode: gameMode.value,
+      endgameTarget: endgameTarget.value,
+      players: players.value.map(p => ({ name: p.name, score: p.score, id: p.id })),
+      currentRound: currentRound.value,
+      currentPlayerIndex: currentPlayerIndex.value,
+      gameEnded: gameEnded.value,
+      winner: winner.value ? { name: winner.value.name, score: winner.value.score, id: winner.value.id } : null,
+      whiteDice: whiteDice.value,
+      whiteDiceRolled: whiteDiceRolled.value,
+      rerollUsed: rerollUsed.value,
+      whiteDiceScore: whiteDiceScore.value,
+      autoRerolled: autoRerolled.value,
+      blackDieBanked: { ...blackDieBanked.value },
+      blackDiePhaseActive: blackDiePhaseActive.value,
+      blackDieRolled: blackDieRolled.value,
+      blackDieValue: blackDieValue.value,
+      blackDieScore: blackDieScore.value
+    }
+    
+    sessionStorage.save(state)
+  }
+  
+  // Restore state from a snapshot
+  function restoreState(state) {
+    if (!state) return
+    
+    console.log('[GAME STATE] restoreState called with:', {
+      players: state.players?.map(p => ({ name: p.name, score: p.score })),
+      currentRound: state.currentRound,
+      currentPlayerIndex: state.currentPlayerIndex
+    })
+    
+    // Log current state before restore
+    console.log('[GAME STATE] Current state before restore:', {
+      players: players.value.map(p => ({ name: p.name, score: p.score }))
+    })
+    
+    gameMode.value = state.gameMode
+    endgameTarget.value = state.endgameTarget
+    
+    // CRITICAL: Completely replace the players array to ensure Vue reactivity
+    // Create a completely new array with new objects to force reactivity
+    if (state.players && Array.isArray(state.players)) {
+      const newPlayers = state.players.map(p => ({
+        name: p.name,
+        score: typeof p.score === 'number' ? p.score : 0, // Ensure score is always a number
+        id: p.id || Math.random().toString(36).substr(2, 9)
+      }))
+      console.log('[GAME STATE] Creating new players array:', {
+        newPlayers: newPlayers.map(p => ({ name: p.name, score: p.score }))
+      })
+      // Clear existing array first to force reactivity
+      players.value.splice(0, players.value.length)
+      // Then push new players
+      newPlayers.forEach(p => players.value.push(p))
+      console.log('[GAME STATE] Players array assigned, current value:', {
+        players: players.value.map(p => ({ name: p.name, score: p.score }))
+      })
+    }
+    
+    currentRound.value = state.currentRound || 1
+    // Ensure currentPlayerIndex is valid
+    const validIndex = Math.max(0, Math.min(state.currentPlayerIndex ?? 0, players.value.length - 1))
+    currentPlayerIndex.value = validIndex
+    gameStarted.value = true
+    gameEnded.value = state.gameEnded || false
+    
+    // Restore winner - find by ID in the restored players array
+    if (state.winner && state.winner.id) {
+      winner.value = players.value.find(p => p.id === state.winner.id) || null
+    } else {
+      winner.value = null
+    }
+    
+    whiteDice.value = state.whiteDice ? [...state.whiteDice] : [null, null, null]
+    whiteDiceRolled.value = state.whiteDiceRolled || false
+    rerollUsed.value = state.rerollUsed || false
+    whiteDiceScore.value = state.whiteDiceScore || 0
+    autoRerolled.value = state.autoRerolled || false
+    
+    blackDieBanked.value = state.blackDieBanked ? { ...state.blackDieBanked } : {}
+    blackDiePhaseActive.value = state.blackDiePhaseActive || false
+    blackDieRolled.value = state.blackDieRolled || false
+    blackDieValue.value = state.blackDieValue ?? null
+    blackDieScore.value = state.blackDieScore || 0
+    
+    console.log('[GAME STATE] restoreState completed, players now:', {
+      players: players.value.map(p => ({ name: p.name, score: p.score }))
+    })
+  }
+  
+  // Load game state from session storage
+  function loadGameState(savedState) {
+    if (!savedState) return false
+    
+    try {
+      restoreState(savedState)
+      return true
+    } catch (error) {
+      console.error('Failed to load game state:', error)
+      return false
+    }
+  }
+  
   // Reset game
   function resetGame() {
+    clearHistory()
     gameStarted.value = false
     gameEnded.value = false
     winner.value = null
@@ -304,7 +619,32 @@ export function useGameState() {
     blackDiePhaseActive.value = false
     blackDieBanked.value = {}
     resetTurnState()
+    sessionStorage.clear()
   }
+  
+  // Save game result to leaderboard
+  function saveToLeaderboard() {
+    if (!gameEnded.value || !winner.value) return
+    
+    const gameResult = {
+      players: players.value.map(p => ({
+        name: p.name,
+        score: p.score
+      })),
+      target: endgameTarget.value,
+      winner: winner.value.name,
+      winnerScore: winner.value.score
+    }
+    
+    localStorage.saveGameResult(gameResult)
+  }
+  
+  // Auto-save on state changes
+  watch([gameStarted, gameEnded, currentRound, currentPlayerIndex, players, whiteDiceScore, blackDieScore], () => {
+    if (gameStarted.value) {
+      saveGameState()
+    }
+  }, { deep: true })
   
   return {
     // State
@@ -350,6 +690,14 @@ export function useGameState() {
     getBankedCount,
     hasBankedBlackDie,
     resetGame,
+    saveGameState,
+    loadGameState,
+    // History
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    getHistoryEntries,
     gameStarted
   }
 }

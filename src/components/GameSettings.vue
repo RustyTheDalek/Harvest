@@ -31,31 +31,69 @@
       </div>
     </div>
     
-    <!-- Number of Players -->
-    <div class="space-y-3">
-      <label class="block text-sm font-medium">Number of Players</label>
-      <input
-        v-model.number="numPlayers"
-        type="number"
-        min="2"
-        max="10"
-        class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white text-center text-xl touch-target"
-      />
-    </div>
-    
     <!-- Player Names -->
     <div class="space-y-3">
       <label class="block text-sm font-medium">Player Names</label>
       <div class="space-y-2">
-        <input
+        <div
           v-for="(name, index) in playerNames"
           :key="index"
-          v-model="playerNames[index]"
-          type="text"
-          :placeholder="`Player ${index + 1}`"
-          class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white touch-target"
-        />
+          :ref="el => { if (el) playerRefs[index] = el }"
+          :class="[
+            'flex items-center gap-2 bg-gray-800 rounded-lg p-2 transition-all touch-target',
+            draggingIndex === index ? 'opacity-50 scale-95' : '',
+            dragOverIndex === index ? 'border-2 border-blue-500' : 'border border-gray-700'
+          ]"
+          @touchstart="handleTouchStart($event, index)"
+          @touchmove="handleTouchMove($event, index)"
+          @touchend="handleTouchEnd"
+          @touchcancel="handleTouchEnd"
+          @mousedown="handleMouseDown($event, index)"
+        >
+          <!-- Drag Handle -->
+          <div class="flex-shrink-0 text-gray-500 cursor-grab active:cursor-grabbing">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
+            </svg>
+          </div>
+          
+          <!-- Player Name Input -->
+          <input
+            v-model="playerNames[index]"
+            type="text"
+            :placeholder="`Player ${index + 1}`"
+            class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white touch-target"
+            @click.stop
+          />
+          
+          <!-- Remove Button -->
+          <button
+            @click.stop="removePlayer(index)"
+            :disabled="playerNames.length <= 1"
+            :class="[
+              'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors touch-target',
+              playerNames.length > 1
+                ? 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800'
+                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+            ]"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
       </div>
+      
+      <!-- Add Player Button -->
+      <button
+        @click="addPlayer"
+        class="w-full py-3 px-4 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors touch-target flex items-center justify-center gap-2"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+        </svg>
+        Add Player
+      </button>
     </div>
     
     <!-- Score Target -->
@@ -124,33 +162,177 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 
 const emit = defineEmits(['start'])
 
 const selectedMode = ref('dice')
-const numPlayers = ref(2)
 const playerNames = ref(['', ''])
 const selectedTarget = ref(10000)
+const playerRefs = ref({})
+
+// Drag and drop state
+const draggingIndex = ref(-1)
+const dragOverIndex = ref(-1)
+const touchStartY = ref(0)
+const touchStartIndex = ref(-1)
+const mouseStartY = ref(0)
+const mouseStartIndex = ref(-1)
+const isMouseDrag = ref(false)
 
 const canStart = computed(() => {
   return (
-    numPlayers.value >= 2 &&
-    playerNames.value.slice(0, numPlayers.value).every(name => name.trim() !== '')
+    playerNames.value.length > 0 &&
+    playerNames.value.every(name => name.trim() !== '')
   )
 })
 
-// Update player names when numPlayers changes
-function updatePlayerNames() {
-  const current = playerNames.value.length
-  if (numPlayers.value > current) {
-    for (let i = current; i < numPlayers.value; i++) {
-      playerNames.value.push('')
-    }
-  } else {
-    playerNames.value = playerNames.value.slice(0, numPlayers.value)
-  }
+function addPlayer() {
+  playerNames.value.push('')
 }
+
+function removePlayer(index) {
+  if (playerNames.value.length <= 1) return
+  playerNames.value.splice(index, 1)
+  // Clean up refs
+  const newRefs = {}
+  Object.keys(playerRefs.value).forEach(key => {
+    const keyNum = parseInt(key)
+    if (keyNum < index) {
+      newRefs[key] = playerRefs.value[key]
+    } else if (keyNum > index) {
+      newRefs[keyNum - 1] = playerRefs.value[key]
+    }
+  })
+  playerRefs.value = newRefs
+}
+
+// Touch-based drag and drop
+function handleTouchStart(event, index) {
+  if (playerNames.value.length <= 1) return
+  touchStartY.value = event.touches[0].clientY
+  touchStartIndex.value = index
+  draggingIndex.value = index
+  event.preventDefault()
+}
+
+function handleTouchMove(event, index) {
+  if (draggingIndex.value === -1) return
+  event.preventDefault()
+  
+  const touchY = event.touches[0].clientY
+  const deltaY = touchY - touchStartY.value
+  
+  // Find which element we're over
+  let newDragOverIndex = touchStartIndex.value
+  const threshold = 40 // pixels
+  
+  if (Math.abs(deltaY) > threshold) {
+    const direction = deltaY > 0 ? 1 : -1
+    const potentialIndex = touchStartIndex.value + direction
+    
+    if (potentialIndex >= 0 && potentialIndex < playerNames.value.length) {
+      newDragOverIndex = potentialIndex
+    }
+  }
+  
+  dragOverIndex.value = newDragOverIndex
+}
+
+function handleTouchEnd() {
+  if (draggingIndex.value === -1) return
+  
+  if (dragOverIndex.value !== -1 && dragOverIndex.value !== draggingIndex.value) {
+    // Swap players
+    const temp = playerNames.value[draggingIndex.value]
+    playerNames.value[draggingIndex.value] = playerNames.value[dragOverIndex.value]
+    playerNames.value[dragOverIndex.value] = temp
+  }
+  
+  draggingIndex.value = -1
+  dragOverIndex.value = -1
+  touchStartIndex.value = -1
+}
+
+// Mouse-based drag and drop (for desktop)
+function handleMouseDown(event, index) {
+  if (playerNames.value.length <= 1) return
+  // Only handle if clicking on drag handle or the row itself (not input/button)
+  if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON' || event.target.closest('button')) {
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  mouseStartY.value = event.clientY
+  mouseStartIndex.value = index
+  draggingIndex.value = index
+  isMouseDrag.value = true
+  
+  // Prevent text selection during drag
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'grabbing'
+  
+  // Add global mouse event listeners
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
+}
+
+function handleMouseMove(event) {
+  if (draggingIndex.value === -1 || !isMouseDrag.value) return
+  
+  const mouseY = event.clientY
+  const deltaY = mouseY - mouseStartY.value
+  
+  // Find which element we're over
+  let newDragOverIndex = mouseStartIndex.value
+  const threshold = 40 // pixels
+  
+  if (Math.abs(deltaY) > threshold) {
+    const direction = deltaY > 0 ? 1 : -1
+    const potentialIndex = mouseStartIndex.value + direction
+    
+    if (potentialIndex >= 0 && potentialIndex < playerNames.value.length) {
+      newDragOverIndex = potentialIndex
+    }
+  }
+  
+  dragOverIndex.value = newDragOverIndex
+}
+
+function handleMouseUp() {
+  // Restore text selection
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+  
+  if (draggingIndex.value === -1) {
+    cleanupMouseEvents()
+    return
+  }
+  
+  if (dragOverIndex.value !== -1 && dragOverIndex.value !== draggingIndex.value) {
+    // Swap players
+    const temp = playerNames.value[draggingIndex.value]
+    playerNames.value[draggingIndex.value] = playerNames.value[dragOverIndex.value]
+    playerNames.value[dragOverIndex.value] = temp
+  }
+  
+  draggingIndex.value = -1
+  dragOverIndex.value = -1
+  mouseStartIndex.value = -1
+  isMouseDrag.value = false
+  
+  cleanupMouseEvents()
+}
+
+function cleanupMouseEvents() {
+  document.removeEventListener('mousemove', handleMouseMove)
+  document.removeEventListener('mouseup', handleMouseUp)
+}
+
+// Clean up event listeners on unmount
+onUnmounted(() => {
+  cleanupMouseEvents()
+})
 
 // Score target controls
 function incrementTarget() {
@@ -183,11 +365,7 @@ function startGame() {
   emit('start', {
     mode: selectedMode.value,
     target: selectedTarget.value,
-    players: playerNames.value.slice(0, numPlayers.value).map(name => name.trim() || `Player ${playerNames.value.indexOf(name) + 1}`)
+    players: playerNames.value.map(name => name.trim() || `Player ${playerNames.value.indexOf(name) + 1}`)
   })
 }
-
-// Watch numPlayers
-watch(numPlayers, updatePlayerNames)
 </script>
-
