@@ -112,10 +112,10 @@
         <!-- Decrement Button -->
         <button
           @click="decrementTarget"
-          :disabled="selectedTarget <= 10000"
+          :disabled="selectedTarget <= 5000"
           :class="[
             'w-14 h-14 rounded-lg font-bold text-2xl transition-colors touch-target flex items-center justify-center',
-            selectedTarget > 10000
+            selectedTarget > 5000
               ? 'bg-gray-700 text-white hover:bg-gray-600 active:bg-gray-500'
               : 'bg-gray-800 text-gray-600 cursor-not-allowed'
           ]"
@@ -128,7 +128,7 @@
           <input
             v-model.number="selectedTarget"
             type="number"
-            min="10000"
+            min="5000"
             step="5000"
             class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white text-center text-xl font-medium touch-target"
             @input="validateTarget"
@@ -351,15 +351,15 @@ function incrementTarget() {
 }
 
 function decrementTarget() {
-  if (selectedTarget.value > 10000) {
+  if (selectedTarget.value > 5000) {
     selectedTarget.value -= 5000
   }
 }
 
 function validateTarget() {
   // Ensure target is a multiple of 5,000 and within bounds
-  if (selectedTarget.value < 10000) {
-    selectedTarget.value = 10000
+  if (selectedTarget.value < 5000) {
+    selectedTarget.value = 5000
   } else if (selectedTarget.value > 100000) {
     selectedTarget.value = 100000
   } else {
