@@ -15,11 +15,12 @@ export function useGameHistory() {
   /**
    * Create a snapshot of the current game state
    */
-  function createSnapshot(gameState, actionDescription) {
+  function createSnapshot(gameState, actionDescription, odds = null) {
     return {
       timestamp: Date.now(),
       action: actionDescription,
-      state: JSON.parse(JSON.stringify(gameState)) // Deep clone
+      state: JSON.parse(JSON.stringify(gameState)), // Deep clone
+      odds: odds // Probability information for this action
     }
   }
   
@@ -140,7 +141,8 @@ export function useGameHistory() {
       index,
       timestamp: entry.timestamp,
       action: entry.action,
-      isCurrent: index === currentIndex.value
+      isCurrent: index === currentIndex.value,
+      odds: entry.odds || null // Include odds if available
     }))
   }
   

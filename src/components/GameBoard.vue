@@ -41,6 +41,12 @@
           History
         </button>
         <button
+          @click="showOdds = !showOdds"
+          class="py-2 px-4 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors touch-target"
+        >
+          {{ showOdds ? 'Hide Odds' : 'Show Odds' }}
+        </button>
+        <button
           @click="handleQuitGame"
           class="py-2 px-4 rounded-lg font-medium bg-red-600 text-white hover:bg-red-700 transition-colors touch-target"
         >
@@ -52,6 +58,15 @@
       <div v-if="showHistory && gameStarted" class="ipad:hidden">
         <HistoryPanel
           :history-entries="historyEntries"
+        />
+      </div>
+      
+      <!-- Odds Panel (toggleable) -->
+      <div v-if="showOdds && gameStarted">
+        <OddsPanel
+          :current-dice="whiteDice"
+          :is-bonus-die-phase="blackDiePhaseActive"
+          @close="showOdds = false"
         />
       </div>
       
@@ -171,9 +186,11 @@ import BlackDie from './BlackDie.vue'
 import ScoreInput from './ScoreInput.vue'
 import HistoryPanel from './HistoryPanel.vue'
 import Leaderboard from './Leaderboard.vue'
+import OddsPanel from './OddsPanel.vue'
 
 const showHistory = ref(false)
 const showLeaderboard = ref(false)
+const showOdds = ref(false)
 const leaderboardRef = ref(null)
 
 const {

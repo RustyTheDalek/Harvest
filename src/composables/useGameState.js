@@ -3,6 +3,7 @@ import { calculateWhiteDiceScore, calculateBonusDieScore, isBonusDiePhase } from
 import { sessionStorage, localStorage } from '../utils/storage'
 import { useGameHistory } from './useGameHistory'
 import { triggerBonusDieConfetti, triggerTripleConfetti, triggerTripleSixConfetti, isTripleSix, isTriple } from '../utils/confetti'
+import { getDicePatternProbability, getBonusDieScoreProbability, formatProbability, formatProbabilityAsOdds } from '../utils/probability'
 
 export function useGameState() {
   // History tracking
@@ -168,9 +169,19 @@ export function useGameState() {
       newScore
     })
     
+    // Calculate odds for this specific result
+    const odds = getDicePatternProbability(whiteDice.value)
+    const oddsInfo = {
+      probability: odds,
+      formatted: formatProbability(odds),
+      oddsRatio: formatProbabilityAsOdds(odds),
+      dice: [...whiteDice.value],
+      score: scoreAdded
+    }
+    
     // Track history BEFORE making any changes - snapshot has state before action
     // This ensures undo restores to the exact state before the score was added
-    trackHistory(`${playerName} scored ${scoreAdded} (Total: ${newScore})`)
+    trackHistory(`${playerName} scored ${scoreAdded} (Total: ${newScore})`, oddsInfo)
     
     // Trigger confetti for good scores
     if (isTripleSix(whiteDice.value)) {
@@ -312,9 +323,19 @@ export function useGameState() {
     const scoreAdded = blackDieScore.value
     const newScore = currentPlayer.value.score + scoreAdded
     
+    // Calculate odds for bonus die result
+    const odds = getBonusDieScoreProbability(blackDieScore.value)
+    const oddsInfo = {
+      probability: odds,
+      formatted: formatProbability(odds),
+      oddsRatio: formatProbabilityAsOdds(odds),
+      value: blackDieValue.value,
+      score: scoreAdded
+    }
+    
     // Track history BEFORE making any changes - snapshot has state before action
     // This ensures undo restores to the exact state before the score was added
-    trackHistory(`${playerName} scored ${scoreAdded} from bonus die (Total: ${newScore})`)
+    trackHistory(`${playerName} scored ${scoreAdded} from bonus die (Total: ${newScore})`, oddsInfo)
     
     // Trigger confetti for bonus die (1 or 5)
     if (blackDieValue.value === 1 || blackDieValue.value === 5) {
@@ -429,7 +450,7 @@ export function useGameState() {
   }
   
   // Track history for an action
-  function trackHistory(actionDescription) {
+  function trackHistory(actionDescription, odds = null) {
     if (!gameStarted.value) {
       console.log('[GAME STATE] trackHistory: Game not started, skipping')
       return
@@ -443,9 +464,10 @@ export function useGameState() {
       currentPlayer: state.players[state.currentPlayerIndex]?.name,
       playerScores: state.players.map(p => ({ name: p.name, score: p.score })),
       whiteDiceRolled: state.whiteDiceRolled,
-      rerollUsed: state.rerollUsed
+      rerollUsed: state.rerollUsed,
+      odds: odds
     })
-    const snapshot = createSnapshot(state, actionDescription)
+    const snapshot = createSnapshot(state, actionDescription, odds)
     console.log('[GAME STATE] Snapshot created with scores:', {
       players: snapshot.state.players.map(p => ({ name: p.name, score: p.score }))
     })

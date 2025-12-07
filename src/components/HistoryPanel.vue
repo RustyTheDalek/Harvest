@@ -18,6 +18,13 @@
         <div class="flex items-center justify-between">
           <div class="flex-1">
             <div class="text-sm font-medium">{{ entry.action }}</div>
+            <div v-if="entry.odds" class="text-xs mt-1" :class="getOddsColorClass(entry.odds.probability, entry.isCurrent)">
+              <span>{{ entry.odds.formatted }}</span>
+              <span :class="entry.isCurrent ? 'text-blue-200 ml-2' : 'text-gray-400 ml-2'">({{ entry.odds.oddsRatio }})</span>
+              <span v-if="entry.odds.dice" :class="entry.isCurrent ? 'text-blue-200 ml-2' : 'text-gray-400 ml-2'">
+                [{{ entry.odds.dice.join(', ') }}]
+              </span>
+            </div>
           </div>
           <div v-if="entry.isCurrent" class="ml-2 text-xs">Current</div>
         </div>
@@ -34,5 +41,16 @@ const props = defineProps({
   }
 })
 
+function getOddsColorClass(probability, isCurrent) {
+  // Use a simple, readable color scheme that works on both backgrounds
+  // For better readability, use consistent colors with good contrast
+  if (isCurrent) {
+    // For current entry (blue-600 background), use white/light gray for readability
+    return 'text-white opacity-90'
+  } else {
+    // For normal entries (gray-700 background), use a light gray that's readable
+    return 'text-gray-300'
+  }
+}
 </script>
 
