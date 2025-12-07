@@ -1,7 +1,7 @@
 <template>
   <div class="w-full space-y-6">
     <!-- History Controls -->
-    <div v-if="gameStarted" class="flex items-center gap-2">
+    <div v-if="gameStarted" class="flex items-center gap-2 flex-wrap">
       <button
         @click="handleUndo"
         :disabled="!canUndo"
@@ -38,6 +38,12 @@
       >
         History
       </button>
+      <button
+        @click="handleQuitGame"
+        class="py-2 px-4 rounded-lg font-medium bg-red-600 text-white hover:bg-red-700 transition-colors touch-target"
+      >
+        Quit Game
+      </button>
     </div>
     
     <!-- History Panel -->
@@ -71,9 +77,9 @@
         <div class="text-2xl font-bold">{{ currentPlayer?.name }}</div>
       </div>
       
-      <!-- Black Die Phase -->
-      <div v-if="blackDiePhaseActive">
-        <BlackDie
+        <!-- Bonus Die Phase -->
+        <div v-if="blackDiePhaseActive">
+          <BlackDie
           :has-banked="hasBankedBlackDie()"
           :banked-count="getBankedCount()"
           :rolled="blackDieRolled"
@@ -107,9 +113,7 @@
         <!-- Score Tracker Mode -->
         <ScoreInput
           v-else
-          :reroll-used="rerollUsed"
           @confirm="handleScoreInputConfirm"
-          @reroll="handleScoreInputReroll"
         />
       </div>
     </div>
@@ -243,13 +247,7 @@ function handleScoreInputConfirm(dice, score) {
   completeWhiteDiceTurn()
 }
 
-function handleScoreInputReroll() {
-  // Mark reroll as used (don't roll dice in manual mode)
-  markRerollUsed()
-  // ScoreInput component will reset its own input state
-}
-
-// Black die handlers
+// Bonus die handlers
 function handleBlackDieRoll() {
   if (gameMode.value === 'dice') {
     rollBlackDie()
@@ -302,6 +300,15 @@ function handleNewGame() {
   showLeaderboard.value = false
   // Force parent to show settings by explicitly setting gameStarted to false
   // The watcher should catch this, but we'll ensure it happens
+}
+
+// Quit game
+function handleQuitGame() {
+  if (confirm('Are you sure you want to quit? Your current game progress will be lost.')) {
+    resetGame()
+    showHistory.value = false
+    showLeaderboard.value = false
+  }
 }
 
 // Watch for game end to reload leaderboard

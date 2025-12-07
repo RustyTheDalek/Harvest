@@ -1,7 +1,8 @@
 import { ref, computed, watch } from 'vue'
-import { calculateWhiteDiceScore, calculateBlackDieScore, isBlackDiePhase } from '../utils/scoring'
+import { calculateWhiteDiceScore, calculateBonusDieScore, isBonusDiePhase } from '../utils/scoring'
 import { sessionStorage, localStorage } from '../utils/storage'
 import { useGameHistory } from './useGameHistory'
+import { triggerBonusDieConfetti, triggerTripleConfetti, triggerTripleSixConfetti, isTripleSix, isTriple } from '../utils/confetti'
 
 export function useGameState() {
   // History tracking
@@ -37,7 +38,7 @@ export function useGameState() {
   const whiteDiceScore = ref(0)
   const autoRerolled = ref(false)
   
-  // Black die state
+  // Bonus die state
   const blackDieBanked = ref({}) // { playerIndex: true/false }
   const blackDiePhaseActive = ref(false)
   const blackDieRolled = ref(false)
@@ -46,7 +47,7 @@ export function useGameState() {
   
   // Computed
   const currentPlayer = computed(() => players.value[currentPlayerIndex.value])
-  const isBlackDieRound = computed(() => isBlackDiePhase(currentRound.value))
+  const isBlackDieRound = computed(() => isBonusDiePhase(currentRound.value))
   const allPlayersHaveBanked = computed(() => {
     if (!blackDiePhaseActive.value) return false
     return players.value.every((_, index) => {
@@ -171,6 +172,13 @@ export function useGameState() {
     // This ensures undo restores to the exact state before the score was added
     trackHistory(`${playerName} scored ${scoreAdded} (Total: ${newScore})`)
     
+    // Trigger confetti for good scores
+    if (isTripleSix(whiteDice.value)) {
+      triggerTripleSixConfetti()
+    } else if (isTriple(whiteDice.value)) {
+      triggerTripleConfetti()
+    }
+    
     // Add score to current player
     currentPlayer.value.score += whiteDiceScore.value
     
@@ -204,7 +212,7 @@ export function useGameState() {
     
     // If all players have gone, start new round
     if (currentPlayerIndex.value >= players.value.length) {
-      // Check if black die phase BEFORE incrementing (check if we just completed round 3, 6, 9, etc.)
+      // Check if bonus die phase BEFORE incrementing (check if we just completed round 3, 6, 9, etc.)
       const justCompletedRound = currentRound.value
       const willBeBlackDiePhase = justCompletedRound > 0 && justCompletedRound % 3 === 0
       
@@ -218,7 +226,7 @@ export function useGameState() {
       currentRound.value++
       currentPlayerIndex.value = 0
       
-      // Initialize black die state if needed
+      // Initialize bonus die state if needed
       if (willBeBlackDiePhase) {
         blackDiePhaseActive.value = true
         players.value.forEach((_, index) => {
@@ -227,7 +235,7 @@ export function useGameState() {
           }
         })
         // Track history AFTER state is updated to valid values
-        trackHistory(`Round ${justCompletedRound} complete - Black Die Phase started - ${currentPlayer.value.name}'s turn`)
+        trackHistory(`Round ${justCompletedRound} complete - Bonus Die Phase started - ${currentPlayer.value.name}'s turn`)
       } else {
         // Track history AFTER state is updated to valid values
         // Only track if round actually changed
@@ -247,30 +255,30 @@ export function useGameState() {
     resetTurnState()
   }
   
-  // Bank black die (before rolling)
+  // Bank bonus die (before rolling)
   function bankBlackDie() {
     // Banking accumulates - each bank adds +1 reroll
     const currentBanked = blackDieBanked.value[currentPlayerIndex.value] || 0
     blackDieBanked.value[currentPlayerIndex.value] = currentBanked + 1
     blackDieRolled.value = true
     blackDieScore.value = 0
-    trackHistory(`${currentPlayer.value.name} banked black die (${currentBanked + 1} reroll${currentBanked + 1 > 1 ? 's' : ''})`)
+    trackHistory(`${currentPlayer.value.name} banked bonus die (${currentBanked + 1} reroll${currentBanked + 1 > 1 ? 's' : ''})`)
     moveToNextBlackDiePlayer()
     saveGameState()
   }
   
-  // Roll black die (initial roll)
+  // Roll bonus die (initial roll)
   function rollBlackDie() {
     // Always roll once initially
     blackDieValue.value = Math.floor(Math.random() * 6) + 1
-    blackDieScore.value = calculateBlackDieScore(blackDieValue.value)
+    blackDieScore.value = calculateBonusDieScore(blackDieValue.value)
     blackDieRolled.value = true
-    trackHistory(`${currentPlayer.value.name} rolled black die: ${blackDieValue.value} (${blackDieScore.value} points)`)
+    trackHistory(`${currentPlayer.value.name} rolled bonus die: ${blackDieValue.value} (${blackDieScore.value} points)`)
     saveGameState()
-    // Don't move to next player yet - wait for confirmation or reroll
+    // Don't auto-confirm - let user see the result and confirm manually
   }
   
-  // Reroll black die (uses 1 banked reroll)
+  // Reroll bonus die (uses 1 banked reroll)
   function rerollBlackDie() {
     if (!blackDieRolled.value) return
     const rerollCount = getBankedCount()
@@ -278,16 +286,16 @@ export function useGameState() {
     if (rerollCount > 0) {
       // Roll again and take the better result
       const newRoll = Math.floor(Math.random() * 6) + 1
-      const newScore = calculateBlackDieScore(newRoll)
+      const newScore = calculateBonusDieScore(newRoll)
       const oldScore = blackDieScore.value
       
       // Take the better score
       if (newScore > blackDieScore.value) {
         blackDieValue.value = newRoll
         blackDieScore.value = newScore
-        trackHistory(`${currentPlayer.value.name} rerolled black die: ${newRoll} (${newScore} points, was ${oldScore})`)
+        trackHistory(`${currentPlayer.value.name} rerolled bonus die: ${newRoll} (${newScore} points, was ${oldScore})`)
       } else {
-        trackHistory(`${currentPlayer.value.name} rerolled black die: ${newRoll} (kept ${oldScore} points)`)
+        trackHistory(`${currentPlayer.value.name} rerolled bonus die: ${newRoll} (kept ${oldScore} points)`)
       }
       
       // Subtract 1 from banked rerolls
@@ -296,7 +304,7 @@ export function useGameState() {
     }
   }
   
-  // Confirm black die roll and add score (keep current result)
+  // Confirm bonus die roll and add score (keep current result)
   function confirmBlackDieRoll() {
     if (!blackDieRolled.value) return
     
@@ -306,7 +314,12 @@ export function useGameState() {
     
     // Track history BEFORE making any changes - snapshot has state before action
     // This ensures undo restores to the exact state before the score was added
-    trackHistory(`${playerName} scored ${scoreAdded} from black die (Total: ${newScore})`)
+    trackHistory(`${playerName} scored ${scoreAdded} from bonus die (Total: ${newScore})`)
+    
+    // Trigger confetti for bonus die (1 or 5)
+    if (blackDieValue.value === 1 || blackDieValue.value === 5) {
+      triggerBonusDieConfetti()
+    }
     
     // Add score to current player
     currentPlayer.value.score += blackDieScore.value
@@ -327,32 +340,32 @@ export function useGameState() {
   }
   
   
-  // Set black die (manual entry mode - single roll)
+  // Set bonus die (manual entry mode - single roll)
   function setBlackDie(value) {
     blackDieValue.value = value
-    blackDieScore.value = calculateBlackDieScore(value)
+    blackDieScore.value = calculateBonusDieScore(value)
     blackDieRolled.value = true
-    trackHistory(`${currentPlayer.value.name} rolled black die: ${value} (${blackDieScore.value} points)`)
+    trackHistory(`${currentPlayer.value.name} rolled bonus die: ${value} (${blackDieScore.value} points)`)
     saveGameState()
     // Don't move to next player yet - wait for confirmation or reroll
   }
   
-  // Reroll black die manually (uses 1 banked reroll)
+  // Reroll bonus die manually (uses 1 banked reroll)
   function rerollBlackDieManual(newRoll) {
     if (!blackDieRolled.value) return
     const rerollCount = getBankedCount()
     
     if (rerollCount > 0) {
-      const newScore = calculateBlackDieScore(newRoll)
+      const newScore = calculateBonusDieScore(newRoll)
       const oldScore = blackDieScore.value
       
       // Take the better score
       if (newScore > blackDieScore.value) {
         blackDieValue.value = newRoll
         blackDieScore.value = newScore
-        trackHistory(`${currentPlayer.value.name} rerolled black die: ${newRoll} (${newScore} points, was ${oldScore})`)
+        trackHistory(`${currentPlayer.value.name} rerolled bonus die: ${newRoll} (${newScore} points, was ${oldScore})`)
       } else {
-        trackHistory(`${currentPlayer.value.name} rerolled black die: ${newRoll} (kept ${oldScore} points)`)
+        trackHistory(`${currentPlayer.value.name} rerolled bonus die: ${newRoll} (kept ${oldScore} points)`)
       }
       
       // Subtract 1 from banked rerolls
@@ -361,16 +374,16 @@ export function useGameState() {
     }
   }
   
-  // Confirm black die (for manual entry)
+  // Confirm bonus die (for manual entry)
   function confirmBlackDieManual() {
     confirmBlackDieRoll()
   }
   
-  // Move to next player in black die phase
+  // Move to next player in bonus die phase
   function moveToNextBlackDiePlayer() {
     currentPlayerIndex.value++
     
-    // If all players have gone, end black die phase and start new round
+    // If all players have gone, end bonus die phase and start new round
     if (currentPlayerIndex.value >= players.value.length) {
       // Banked counts persist until used
       
@@ -387,7 +400,7 @@ export function useGameState() {
     return blackDieBanked.value[currentPlayerIndex.value] || 0
   }
   
-  // Check if current player has banked black die
+  // Check if current player has banked bonus die
   function hasBankedBlackDie() {
     return getBankedCount() > 0
   }

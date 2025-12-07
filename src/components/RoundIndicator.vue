@@ -6,7 +6,7 @@
       v-if="isBlackDieRound"
       class="mt-2 text-yellow-400 font-medium"
     >
-      Black Die Phase
+      Bonus Die Phase
     </div>
   </div>
 </template>

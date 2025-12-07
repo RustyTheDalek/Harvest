@@ -108,6 +108,22 @@ export const localStorage = {
       console.error('Failed to clear leaderboard:', error)
       return false
     }
+  },
+
+  removeLeaderboardEntry(index) {
+    try {
+      let leaderboard = this.getLeaderboard()
+      if (index >= 0 && index < leaderboard.length) {
+        leaderboard.splice(index, 1)
+        const serialized = JSON.stringify(leaderboard)
+        window.localStorage.setItem(LEADERBOARD_STORAGE_KEY, serialized)
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Failed to remove leaderboard entry:', error)
+      return false
+    }
   }
 }
 

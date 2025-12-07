@@ -18,7 +18,6 @@
         <div class="flex items-center justify-between">
           <div class="flex-1">
             <div class="text-sm font-medium">{{ entry.action }}</div>
-            <div class="text-xs opacity-75">{{ formatTime(entry.timestamp) }}</div>
           </div>
           <div v-if="entry.isCurrent" class="ml-2 text-xs">Current</div>
         </div>
@@ -35,9 +34,5 @@ const props = defineProps({
   }
 })
 
-function formatTime(timestamp) {
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString()
-}
 </script>
 

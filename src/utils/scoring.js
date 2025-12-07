@@ -44,11 +44,11 @@ export function calculateWhiteDiceScore(dice) {
 }
 
 /**
- * Calculate score for black die
- * @param {number} value - Black die value (1-6)
+ * Calculate score for bonus die
+ * @param {number} value - Bonus die value (1-6)
  * @returns {number} Score for the roll (0 if not 1 or 5)
  */
-export function calculateBlackDieScore(value) {
+export function calculateBonusDieScore(value) {
   if (value === 1) return 1500
   if (value === 5) return 2000
   return 0
@@ -64,11 +64,11 @@ export function isValidDiceRoll(dice) {
 }
 
 /**
- * Check if it's a black die phase (every 3rd round)
+ * Check if it's a bonus die phase (every 3rd round)
  * @param {number} round - Current round number
  * @returns {boolean}
  */
-export function isBlackDiePhase(round) {
+export function isBonusDiePhase(round) {
   return round > 0 && round % 3 === 0
 }
 

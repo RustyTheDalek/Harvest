@@ -124,9 +124,6 @@
             class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white text-center text-xl font-medium touch-target"
             @input="validateTarget"
           />
-          <div class="absolute -bottom-5 left-0 right-0 text-xs text-gray-500 text-center">
-            (in 5,000s)
-          </div>
         </div>
         
         <!-- Increment Button -->

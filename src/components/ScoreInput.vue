@@ -9,8 +9,12 @@
           :key="pattern.value"
           @click="selectPattern(pattern.value)"
           :class="[
-            'py-4 px-6 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors touch-target',
-            pattern.value === 'zero' ? 'col-span-2' : ''
+            'py-4 px-6 text-white rounded-lg font-bold text-lg transition-colors touch-target',
+            pattern.value === 'double' || pattern.value === 'triple' 
+              ? 'bg-green-600 hover:bg-green-700' 
+              : pattern.value === 'zero'
+              ? 'bg-gray-600 hover:bg-gray-700'
+              : 'bg-blue-600 hover:bg-blue-700'
           ]"
         >
           {{ pattern.label }}
@@ -41,39 +45,7 @@
       </button>
     </div>
     
-    <!-- Score Display -->
-    <div
-      v-if="scoreCalculated"
-      class="text-center"
-    >
-      <div class="text-sm text-gray-400 mb-1">Score</div>
-      <div class="text-4xl font-bold">{{ score.toLocaleString() }}</div>
-    </div>
-    
-    <!-- Reroll Option -->
-    <div
-      v-if="scoreCalculated && !rerollUsed"
-      class="space-y-3"
-    >
-      <button
-        @click="handleReroll"
-        class="w-full py-4 px-6 bg-yellow-600 text-white rounded-lg font-bold text-lg hover:bg-yellow-700 transition-colors touch-target"
-      >
-        Reroll (Free)
-      </button>
-    </div>
-    
-    <!-- Confirm Button -->
-    <button
-      v-if="scoreCalculated"
-      @click="handleConfirm"
-      :class="[
-        'w-full py-4 px-6 rounded-lg font-bold text-lg transition-colors touch-target',
-        'bg-green-600 text-white hover:bg-green-700'
-      ]"
-    >
-      Confirm Score
-    </button>
+    <!-- Score Display - REMOVED for tracker mode to prevent flicker -->
   </div>
 </template>
 
@@ -81,34 +53,25 @@
 import { ref, computed, watch } from 'vue'
 import { calculateWhiteDiceScore } from '../utils/scoring'
 
-const props = defineProps({
-  rerollUsed: {
-    type: Boolean,
-    default: false
-  }
-})
-
-const emit = defineEmits(['confirm', 'reroll'])
+const emit = defineEmits(['confirm'])
 
 const patterns = [
-  { value: 'odds', label: 'ODDS (1,3,5)' },
-  { value: 'evens', label: 'EVENS (2,4,6)' },
   { value: 'double', label: 'DOUBLE' },
   { value: 'triple', label: 'TRIPLE' },
+  { value: 'sequential', label: 'ODDS/EVENS' },
   { value: 'zero', label: 'NONE' }
 ]
 
 const patternSelected = ref(null)
 const faceValue = ref(null)
 const score = ref(0)
-const scoreCalculated = ref(false)
+const isConfirming = ref(false)
 
 // Calculate dice array based on selection
 const diceArray = computed(() => {
-  if (patternSelected.value === 'odds') {
+  if (patternSelected.value === 'sequential') {
+    // Sequential pattern (1,3,5 or 2,4,6) - both score 500
     return [1, 3, 5]
-  } else if (patternSelected.value === 'evens') {
-    return [2, 4, 6]
   } else if (patternSelected.value === 'double' && faceValue.value) {
     // For double, we need two of the same and one different
     // We'll use the face value twice and a different value once
@@ -123,25 +86,37 @@ const diceArray = computed(() => {
   return null
 })
 
-// Watch for score calculation
+// Watch for score calculation and auto-confirm (only for double/triple with face value)
 watch(() => [patternSelected.value, faceValue.value], () => {
-  if (diceArray.value) {
+  if (isConfirming.value) return // Prevent duplicate confirmations
+  
+  // Skip sequential/zero - they're handled in selectPattern
+  if (patternSelected.value === 'sequential' || patternSelected.value === 'zero') {
+    return
+  }
+  
+  if (diceArray.value && faceValue.value) {
     score.value = calculateWhiteDiceScore(diceArray.value)
-    scoreCalculated.value = true
+    // Auto-confirm immediately when face value is selected for double/triple
+    // No score display in tracker mode to prevent flicker
+    handleConfirm()
   } else {
     score.value = 0
-    scoreCalculated.value = false
   }
 }, { immediate: true })
 
 function selectPattern(pattern) {
+  // For sequential/zero, confirm immediately without showing score
+  if (pattern === 'sequential' || pattern === 'zero') {
+    const dice = pattern === 'sequential' ? [1, 3, 5] : [1, 2, 3]
+    const calculatedScore = calculateWhiteDiceScore(dice)
+    emit('confirm', dice, calculatedScore)
+    // Don't set patternSelected to avoid flicker
+    return
+  }
+  
   patternSelected.value = pattern
   faceValue.value = null
-  
-  // For odds/evens/zero, score is immediately calculated
-  if (pattern === 'odds' || pattern === 'evens' || pattern === 'zero') {
-    // Score will be calculated by watcher
-  }
 }
 
 function selectFaceValue(face) {
@@ -150,20 +125,13 @@ function selectFaceValue(face) {
 }
 
 function handleConfirm() {
-  if (!diceArray.value) return
+  if (!diceArray.value || isConfirming.value) return
+  isConfirming.value = true
   emit('confirm', diceArray.value, score.value)
   // Reset for next turn
   patternSelected.value = null
   faceValue.value = null
   score.value = 0
-  scoreCalculated.value = false
-}
-
-function handleReroll() {
-  patternSelected.value = null
-  faceValue.value = null
-  score.value = 0
-  scoreCalculated.value = false
-  emit('reroll')
+  isConfirming.value = false
 }
 </script>

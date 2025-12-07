@@ -34,7 +34,7 @@
         v-if="blackDieBanked && blackDieBanked[index] > 0"
         class="mt-2 text-sm text-yellow-400"
       >
-        Banked black die (x{{ blackDieBanked[index] }} reroll{{ blackDieBanked[index] === 1 ? '' : 's' }})
+        Banked bonus die (x{{ blackDieBanked[index] }} reroll{{ blackDieBanked[index] === 1 ? '' : 's' }})
       </div>
     </div>
   </div>

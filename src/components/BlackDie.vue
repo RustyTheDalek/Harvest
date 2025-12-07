@@ -5,7 +5,7 @@
       v-if="hasBanked"
       class="bg-yellow-900 border border-yellow-600 rounded-lg p-4 text-center"
     >
-      <div class="text-yellow-400 font-medium mb-2">You have a banked black die!</div>
+      <div class="text-yellow-400 font-medium mb-2">You have a banked bonus die!</div>
       <div class="text-sm text-yellow-300">After rolling, you can reroll (uses 1 banked reroll each time).</div>
     </div>
     
@@ -21,29 +21,29 @@
         @click="handleBank"
         class="w-full py-4 px-6 bg-purple-600 text-white rounded-lg font-bold text-lg hover:bg-purple-700 transition-colors touch-target"
       >
-        Bank Black Die
+        Bank Bonus Die
       </button>
       <button
         @click="handleRoll"
         class="w-full py-4 px-6 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors touch-target"
       >
-        Roll Black Die
+        Roll Bonus Die
       </button>
     </div>
     
-    <!-- Dice Display (if rolled) -->
+    <!-- Dice Display (if rolled, only in dice mode to prevent flicker in tracker mode) -->
     <div
-      v-if="rolled && value !== null"
+      v-if="rolled && value !== null && mode === 'dice'"
       class="flex justify-center"
     >
-      <div class="w-24 h-24 bg-gray-900 border-4 border-gray-700 rounded-lg flex items-center justify-center text-5xl font-bold text-white shadow-lg">
+      <div class="w-24 h-24 bg-black border-4 border-gray-700 rounded-lg flex items-center justify-center text-5xl font-bold text-white shadow-lg">
         {{ value }}
       </div>
     </div>
     
-    <!-- Score Display -->
+    <!-- Score Display (only in dice mode to prevent flicker in tracker mode) -->
     <div
-      v-if="rolled"
+      v-if="rolled && mode === 'dice'"
       class="text-center"
     >
       <div class="text-sm text-gray-400 mb-1">Score</div>
@@ -65,7 +65,7 @@
         @click="handleBank"
         class="w-full py-4 px-6 bg-purple-600 text-white rounded-lg font-bold text-lg hover:bg-purple-700 transition-colors touch-target"
       >
-        Bank Black Die
+        Bank Bonus Die
       </button>
       <div class="text-center text-lg font-medium mb-4">
         What did you roll?
@@ -122,34 +122,23 @@
       </div>
     </div>
     
-    <!-- Manual Keep Button (for tracker mode after roll) -->
+    <!-- Reroll Button (for dice mode after roll, only if banked rerolls available) -->
     <button
-      v-if="rolled && mode === 'tracker'"
+      v-if="rolled && mode === 'dice' && hasBanked && bankedCount > 0"
+      @click="handleReroll"
+      class="w-full py-4 px-6 bg-yellow-600 text-white rounded-lg font-bold text-lg hover:bg-yellow-700 transition-colors touch-target"
+    >
+      Reroll (x{{ bankedCount }} left)
+    </button>
+    
+    <!-- Confirm Button (for dice mode after roll) -->
+    <button
+      v-if="rolled && mode === 'dice'"
       @click="handleConfirm"
       class="w-full py-4 px-6 bg-green-600 text-white rounded-lg font-bold text-lg hover:bg-green-700 transition-colors touch-target"
     >
-      Keep & Continue
+      Confirm Score
     </button>
-    
-    <!-- Reroll/Keep Buttons (for dice mode after roll) -->
-    <div
-      v-if="rolled && mode === 'dice'"
-      class="space-y-3"
-    >
-      <button
-        v-if="hasBanked && bankedCount > 0"
-        @click="handleReroll"
-        class="w-full py-4 px-6 bg-yellow-600 text-white rounded-lg font-bold text-lg hover:bg-yellow-700 transition-colors touch-target"
-      >
-        Reroll (x{{ bankedCount }} left)
-      </button>
-      <button
-        @click="handleConfirm"
-        class="w-full py-4 px-6 bg-green-600 text-white rounded-lg font-bold text-lg hover:bg-green-700 transition-colors touch-target"
-      >
-        Keep & Continue
-      </button>
-    </div>
   </div>
 </template>
 
@@ -185,8 +174,11 @@ const props = defineProps({
 
 const emit = defineEmits(['roll', 'bank', 'confirm', 'reroll', 'set-single', 'reroll-manual'])
 
+const isConfirming = ref(false)
+
 function handleRoll() {
   emit('roll')
+  // Auto-confirm after roll if no banked rerolls (handled in parent via watcher on blackDieRolled)
 }
 
 function handleBank() {
@@ -194,7 +186,10 @@ function handleBank() {
 }
 
 function handleConfirm() {
+  if (isConfirming.value) return
+  isConfirming.value = true
   emit('confirm')
+  isConfirming.value = false
 }
 
 function handleSingleConfirm(value) {
@@ -204,6 +199,17 @@ function handleSingleConfirm(value) {
   // The scoring function will return 0 for anything that's not 1 or 5 anyway
   const rollValue = value === 0 ? 2 : value
   emit('set-single', rollValue)
+  
+  // Auto-confirm in tracker mode after setting value (if no banked rerolls)
+  if (props.mode === 'tracker' && (!props.hasBanked || props.bankedCount === 0)) {
+    setTimeout(() => {
+      if (!isConfirming.value) {
+        isConfirming.value = true
+        emit('confirm')
+        isConfirming.value = false
+      }
+    }, 100)
+  }
 }
 
 function handleReroll() {
@@ -214,6 +220,17 @@ function handleRerollManual(value) {
   // value can be 1, 5, or 0 (none)
   const rollValue = value === 0 ? 2 : value
   emit('reroll-manual', rollValue)
+  
+  // Auto-confirm after reroll if no more banked rerolls left
+  if (props.bankedCount <= 1) {
+    setTimeout(() => {
+      if (!isConfirming.value) {
+        isConfirming.value = true
+        emit('confirm')
+        isConfirming.value = false
+      }
+    }, 100)
+  }
 }
 
 </script>

@@ -8,7 +8,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.4.21"
+    "vue": "^3.4.21",
+    "canvas-confetti": "^1.9.3"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
