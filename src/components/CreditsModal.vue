@@ -4,7 +4,7 @@
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
     @click.self="close"
   >
-    <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full space-y-4">
+    <div class="bg-gray-800 rounded-lg p-6 max-w-md ipad:max-w-2xl ipad-pro:max-w-3xl w-full space-y-4">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-2xl font-bold">Credits</h2>
         <button

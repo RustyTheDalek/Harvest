@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full max-w-md mx-auto p-6 space-y-6">
+  <div class="w-full max-w-md ipad:max-w-2xl ipad-pro:max-w-3xl mx-auto p-6 space-y-6">
     <h2 class="text-2xl font-bold text-center mb-6">Game Setup</h2>
     
     <!-- Game Mode Selection -->
@@ -44,14 +44,16 @@
             draggingIndex === index ? 'opacity-50 scale-95' : '',
             dragOverIndex === index ? 'border-2 border-blue-500' : 'border border-gray-700'
           ]"
-          @touchstart="handleTouchStart($event, index)"
-          @touchmove="handleTouchMove($event, index)"
-          @touchend="handleTouchEnd"
-          @touchcancel="handleTouchEnd"
-          @mousedown="handleMouseDown($event, index)"
         >
           <!-- Drag Handle -->
-          <div class="flex-shrink-0 text-gray-500 cursor-grab active:cursor-grabbing">
+          <div 
+            class="flex-shrink-0 text-gray-500 cursor-grab active:cursor-grabbing"
+            @touchstart="handleTouchStart($event, index)"
+            @touchmove="handleTouchMove($event, index)"
+            @touchend="handleTouchEnd"
+            @touchcancel="handleTouchEnd"
+            @mousedown="handleMouseDown($event, index)"
+          >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"></path>
             </svg>
@@ -63,7 +65,14 @@
             type="text"
             :placeholder="`Player ${index + 1}`"
             class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white touch-target"
-            @click.stop
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            @touchstart.stop
+            @touchmove.stop
+            @mousedown.stop
+            @focus.stop
           />
           
           <!-- Remove Button -->
@@ -207,10 +216,13 @@ function removePlayer(index) {
 // Touch-based drag and drop
 function handleTouchStart(event, index) {
   if (playerNames.value.length <= 1) return
+  // Only prevent default if not on an input
+  if (event.target.tagName !== 'INPUT' && !event.target.closest('input')) {
+    event.preventDefault()
+  }
   touchStartY.value = event.touches[0].clientY
   touchStartIndex.value = index
   draggingIndex.value = index
-  event.preventDefault()
 }
 
 function handleTouchMove(event, index) {
@@ -254,8 +266,8 @@ function handleTouchEnd() {
 // Mouse-based drag and drop (for desktop)
 function handleMouseDown(event, index) {
   if (playerNames.value.length <= 1) return
-  // Only handle if clicking on drag handle or the row itself (not input/button)
-  if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON' || event.target.closest('button')) {
+  // Only handle if clicking on drag handle (not input/button)
+  if (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON' || event.target.closest('button') || event.target.closest('input')) {
     return
   }
   event.preventDefault()

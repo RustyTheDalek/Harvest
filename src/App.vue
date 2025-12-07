@@ -1,7 +1,7 @@
 <template>
   <div class="w-full h-full bg-gray-900 text-white flex flex-col">
     <div class="flex-1 overflow-y-auto">
-      <div class="w-full max-w-md mx-auto px-4 py-8 space-y-6">
+      <div class="w-full max-w-md ipad:max-w-4xl ipad-pro:max-w-6xl mx-auto px-4 py-8 space-y-6">
         <h1 class="text-3xl font-bold text-center mb-4">Harvest</h1>
         
         <!-- Resume Game Prompt -->
@@ -30,44 +30,52 @@
         </div>
         
         <!-- Main Menu -->
-        <div v-if="!gameStarted && !showResumePrompt && currentPage === 'menu'" class="space-y-4">
-          <!-- Play Game Button -->
-          <button
-            @click="currentPage = 'setup'"
-            class="w-full py-4 px-6 bg-green-600 text-white rounded-lg font-bold text-lg hover:bg-green-700 transition-colors touch-target"
-          >
-            Play Game
-          </button>
+        <div v-if="!gameStarted && !showResumePrompt && currentPage === 'menu'" class="grid grid-cols-1 ipad:grid-cols-[1fr_400px] gap-6 ipad:items-center">
+          <!-- Left Column: Menu Buttons -->
+          <div class="space-y-4">
+            <!-- Play Game Button -->
+            <button
+              @click="currentPage = 'setup'"
+              class="w-full py-4 px-6 bg-green-600 text-white rounded-lg font-bold text-lg hover:bg-green-700 transition-colors touch-target"
+            >
+              Play Game
+            </button>
+            
+            <!-- Rules Button -->
+            <button
+              @click="showRules = true"
+              class="w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors touch-target"
+            >
+              Rules
+            </button>
+            
+            <!-- Credits Button -->
+            <button
+              @click="showCredits = true"
+              class="w-full py-3 px-4 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors touch-target"
+            >
+              Credits
+            </button>
+            
+            <!-- Leaderboard Toggle Button (only on mobile) -->
+            <button
+              @click="showLeaderboard = !showLeaderboard"
+              class="w-full ipad:hidden py-3 px-4 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors touch-target"
+            >
+              {{ showLeaderboard ? 'Hide Leaderboard' : 'View Leaderboard' }}
+            </button>
+            
+            <!-- Leaderboard (mobile only, toggleable) -->
+            <div
+              v-if="showLeaderboard"
+              class="w-full ipad:hidden"
+            >
+              <Leaderboard ref="leaderboardRef" />
+            </div>
+          </div>
           
-          <!-- Rules Button -->
-          <button
-            @click="showRules = true"
-            class="w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors touch-target"
-          >
-            Rules
-          </button>
-          
-          <!-- Credits Button -->
-          <button
-            @click="showCredits = true"
-            class="w-full py-3 px-4 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors touch-target"
-          >
-            Credits
-          </button>
-          
-          <!-- Leaderboard Toggle Button -->
-          <button
-            @click="showLeaderboard = !showLeaderboard"
-            class="w-full py-3 px-4 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors touch-target"
-          >
-            {{ showLeaderboard ? 'Hide Leaderboard' : 'View Leaderboard' }}
-          </button>
-          
-          <!-- Leaderboard -->
-          <div
-            v-if="showLeaderboard"
-            class="w-full"
-          >
+          <!-- Right Column: Leaderboard (always visible on iPad) -->
+          <div class="hidden ipad:block">
             <Leaderboard ref="leaderboardRef" />
           </div>
         </div>
@@ -113,7 +121,7 @@
     
     <!-- Copyright Footer (anchored to bottom) -->
     <footer class="w-full py-4 border-t border-gray-800">
-      <div class="w-full max-w-md mx-auto px-4">
+      <div class="w-full max-w-md ipad:max-w-4xl ipad-pro:max-w-6xl mx-auto px-4">
         <div class="text-center text-xs text-gray-500">
           © Braylon Thomas 2025
         </div>

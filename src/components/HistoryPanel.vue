@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full bg-gray-800 rounded-lg p-4 max-h-96 overflow-y-auto">
+  <div class="w-full bg-gray-800 rounded-lg p-4 max-h-96 ipad:max-h-[calc(100vh-8rem)] ipad:sticky ipad:top-4 overflow-y-auto">
     <div class="text-lg font-bold mb-3">Game History</div>
     <div v-if="historyEntries.length === 0" class="text-gray-400 text-sm text-center py-4">
       No history yet
