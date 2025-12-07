@@ -29,45 +29,66 @@
           </div>
         </div>
         
-        <!-- Game Settings (before game starts) -->
-        <GameSettings
-          v-if="!gameStarted && !showResumePrompt"
-          @start="handleGameStart"
-        />
+        <!-- Main Menu -->
+        <div v-if="!gameStarted && !showResumePrompt && currentPage === 'menu'" class="space-y-4">
+          <!-- Play Game Button -->
+          <button
+            @click="currentPage = 'setup'"
+            class="w-full py-4 px-6 bg-green-600 text-white rounded-lg font-bold text-lg hover:bg-green-700 transition-colors touch-target"
+          >
+            Play Game
+          </button>
+          
+          <!-- Rules Button -->
+          <button
+            @click="showRules = true"
+            class="w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors touch-target"
+          >
+            Rules
+          </button>
+          
+          <!-- Credits Button -->
+          <button
+            @click="showCredits = true"
+            class="w-full py-3 px-4 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors touch-target"
+          >
+            Credits
+          </button>
+          
+          <!-- Leaderboard Toggle Button -->
+          <button
+            @click="showLeaderboard = !showLeaderboard"
+            class="w-full py-3 px-4 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors touch-target"
+          >
+            {{ showLeaderboard ? 'Hide Leaderboard' : 'View Leaderboard' }}
+          </button>
+          
+          <!-- Leaderboard -->
+          <div
+            v-if="showLeaderboard"
+            class="w-full"
+          >
+            <Leaderboard ref="leaderboardRef" />
+          </div>
+        </div>
         
-        <!-- Rules Button (main menu) -->
-        <button
-          v-if="!gameStarted && !showResumePrompt"
-          @click="showRules = true"
-          class="w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors touch-target"
-        >
-          Rules
-        </button>
-        
-        <!-- Credits Button (main menu) -->
-        <button
-          v-if="!gameStarted && !showResumePrompt"
-          @click="showCredits = true"
-          class="w-full py-3 px-4 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors touch-target"
-        >
-          Credits
-        </button>
-        
-        <!-- Leaderboard Toggle Button (main menu) -->
-        <button
-          v-if="!gameStarted && !showResumePrompt"
-          @click="showLeaderboard = !showLeaderboard"
-          class="w-full py-3 px-4 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors touch-target"
-        >
-          {{ showLeaderboard ? 'Hide Leaderboard' : 'View Leaderboard' }}
-        </button>
-        
-        <!-- Leaderboard (accessible from main menu) -->
-        <div
-          v-if="!gameStarted && !showResumePrompt && showLeaderboard"
-          class="w-full"
-        >
-          <Leaderboard ref="leaderboardRef" />
+        <!-- Game Setup Page -->
+        <div v-if="!gameStarted && !showResumePrompt && currentPage === 'setup'" class="space-y-4">
+          <!-- Back Button -->
+          <button
+            @click="currentPage = 'menu'"
+            class="w-full py-3 px-4 bg-gray-700 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors touch-target flex items-center justify-center gap-2"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+            </svg>
+            Back to Menu
+          </button>
+          
+          <!-- Game Settings -->
+          <GameSettings
+            @start="handleGameStart"
+          />
         </div>
         
         <!-- Rules Modal -->
@@ -118,6 +139,7 @@ const showLeaderboard = ref(false)
 const showRules = ref(false)
 const showCredits = ref(false)
 const leaderboardRef = ref(null)
+const currentPage = ref('menu') // 'menu' or 'setup'
 
 function handleGameStart(config) {
   // Store config
@@ -134,6 +156,7 @@ function handleGameStart(config) {
       // Set gameStarted to true after initialization
       gameStarted.value = true
       pendingGameConfig.value = null
+      currentPage.value = 'menu' // Return to menu when game starts
     }
   })
 }
@@ -151,6 +174,7 @@ watch(() => {
   if (started === false) {
     gameStarted.value = false
     pendingGameConfig.value = null
+    currentPage.value = 'menu' // Return to menu when game ends
   }
 })
 
